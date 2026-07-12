@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Visual Rabbit Illusion Demo</title>
+<style>
+  :root {
+    --dot-color: #d7263d;
+    --dot-diameter: 20px;
+    --bg: #000000;
+    --panel-bg: #ffffff;
+    --border: #ccc;
+    --text: #f0f0f0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 20px;
+  }
+  h1 {
+    font-size: 1.3rem;
+    margin: 0 0 16px 0;
+  }
+  #topBar {
+    max-width: 900px;
+    margin: 0 auto 16px auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  #settingsToggle {
+    background: #eee;
+    color: #333;
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+  }
+  #controls {
+    background: var(--panel-bg);
+    color: #222;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    max-width: 900px;
+    margin: 0 auto 24px auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px 20px;
+    align-items: end;
+  }
+  #controls[hidden] {
+    display: none;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.85rem;
+  }
+  .field label {
+    margin-bottom: 4px;
+    font-weight: bold;
+  }
+  .field input, .field select {
+    padding: 6px 8px;
+    font-size: 0.95rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+  .field .hint {
+    font-weight: normal;
+    color: #666;
+    font-size: 0.75rem;
+    margin-top: 2px;
+  }
+  #dxGroup {
+    display: flex;
+    gap: 6px;
+  }
+  #dxGroup input { flex: 1 1 auto; min-width: 0; }
+  #dxGroup select { flex: 0 0 auto; }
+  button {
+    padding: 8px 18px;
+    font-size: 0.95rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  #startBtn { background: #2e7d32; color: #fff; }
+  #startBtn.running { background: #b71c1c; }
+
+  .switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    user-select: none;
+  }
+  .switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .switch .slider {
+    position: relative;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 22px;
+    background: #555;
+    border-radius: 11px;
+    transition: background 0.2s;
+  }
+  .switch .slider::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .switch input:checked + .slider {
+    background: #2e7d32;
+  }
+  .switch input:checked + .slider::before {
+    transform: translateX(18px);
+  }
+
+  #stageWrap {
+    margin: 0 auto;
+  }
+  #stage {
+    position: relative;
+    width: 100%;
+    height: 70vh;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .crosshair {
+    position: absolute;
+    top: 50%;
+    width: 28px;
+    height: 28px;
+    transform: translate(-50%, -50%);
+    display: none;
+    pointer-events: none;
+  }
+  .crosshair.visible {
+    display: block;
+  }
+  .crosshair::before,
+  .crosshair::after {
+    content: '';
+    position: absolute;
+    background: #fff;
+  }
+  .crosshair::before {
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    transform: translateY(-50%);
+  }
+  .crosshair::after {
+    left: 50%;
+    top: 0;
+    height: 100%;
+    width: 2px;
+    transform: translateX(-50%);
+  }
+  .locationMarker {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+    pointer-events: none;
+    color: #fff;
+    font-size: 28px;
+    line-height: 1;
+    font-weight: bold;
+  }
+  .locationMarker.visible {
+    display: block;
+  }
+  .dot {
+    position: absolute;
+    top: 50%;
+    width: var(--dot-diameter);
+    height: var(--dot-diameter);
+    border-radius: 50%;
+    background: var(--dot-color);
+    transform: translate(-50%, -50%);
+    visibility: hidden;
+    box-shadow: 0 0 6px rgba(0,0,0,0.3);
+  }
+  .dot.on { visibility: visible; }
+</style>
+</head>
+<body>
+
+<div id="topBar">
+  <button id="settingsToggle">Settings</button>
+  <button id="startBtn">Start</button>
+  <button id="locToggle">Show dot locations</button>
+  <label class="switch">
+    <input type="checkbox" id="fixationToggle">
+    <span class="slider"></span>
+    Fixation cross
+  </label>
+</div>
+
+<div id="controls" hidden>
+  <div class="field">
+    <label for="repsX">Repetitions at X</label>
+    <input type="number" id="repsX" min="0" max="10" step="1" value="2">
+  </div>
+  <div class="field">
+    <label for="repsY">Repetitions at Y</label>
+    <input type="number" id="repsY" min="0" max="10" step="1" value="2">
+  </div>
+  <div class="field">
+    <label for="repsZ">Repetitions at Z</label>
+    <input type="number" id="repsZ" min="0" max="10" step="1" value="2">
+  </div>
+
+  <div class="field">
+    <label for="onDuration">Flash on-duration (ms)</label>
+    <input type="number" id="onDuration" min="1" step="10" value="100">
+    <span class="hint">time the dot is visible per flash</span>
+  </div>
+  <div class="field">
+    <label for="offDuration">Gap between reps, same site (ms)</label>
+    <input type="number" id="offDuration" min="0" step="10" value="100">
+    <span class="hint">time the dot is hidden between repeats</span>
+  </div>
+  <div class="field">
+    <label for="delayBetween">Delay between locations (ms)</label>
+    <input type="number" id="delayBetween" min="0" step="10" value="100">
+    <span class="hint">pause when jumping to next site</span>
+  </div>
+
+  <div class="field">
+    <label for="dxValue">Distance dx (X&ndash;Y&ndash;Z spacing)</label>
+    <div id="dxGroup">
+      <input type="number" id="dxValue" min="0" step="0.1" value="2">
+      <select id="dxUnit">
+        <option value="cm">cm</option>
+        <option value="pct">% screen width</option>
+      </select>
+    </div>
+  </div>
+  <div class="field">
+    <label for="yPercent">Y position (% between X and Z)</label>
+    <input type="number" id="yPercent" min="0" max="100" step="1" value="50">
+    <span class="hint">0% = at X, 50% = midpoint, 100% = at Z</span>
+  </div>
+</div>
+
+<div id="stageWrap">
+  <div id="stage">
+    <div class="locationMarker" id="crossX">*</div>
+    <div class="locationMarker" id="crossY">*</div>
+    <div class="locationMarker" id="crossZ">*</div>
+    <div class="crosshair" id="fixationCross"></div>
+    <div class="dot" id="dotX"></div>
+    <div class="dot" id="dotY"></div>
+    <div class="dot" id="dotZ"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const startBtn = document.getElementById('startBtn');
+  const settingsToggle = document.getElementById('settingsToggle');
+  const locToggle = document.getElementById('locToggle');
+  const fixationToggle = document.getElementById('fixationToggle');
+  const fixationCross = document.getElementById('fixationCross');
+  const controlsPanel = document.getElementById('controls');
+  const stage = document.getElementById('stage');
+
+  let isRunning = false;
+
+  settingsToggle.addEventListener('click', () => {
+    controlsPanel.hidden = !controlsPanel.hidden;
+  });
+
+  const dots = {
+    x: document.getElementById('dotX'),
+    y: document.getElementById('dotY'),
+    z: document.getElementById('dotZ')
+  };
+  const crosshairs = {
+    x: document.getElementById('crossX'),
+    y: document.getElementById('crossY'),
+    z: document.getElementById('crossZ')
+  };
+
+  let locationsVisible = false;
+  locToggle.addEventListener('click', () => {
+    locationsVisible = !locationsVisible;
+    Object.values(crosshairs).forEach(el => el.classList.toggle('visible', locationsVisible));
+    locToggle.textContent = locationsVisible ? 'Hide dot locations' : 'Show dot locations';
+  });
+
+  fixationToggle.addEventListener('change', () => {
+    fixationCross.classList.toggle('visible', fixationToggle.checked);
+  });
+
+  const CM_TO_PX = 96 / 2.54; // standard CSS px-per-inch assumption
+
+  let runToken = 0; // incremented to cancel in-flight runs
+
+  function sleep(ms, token) {
+    return new Promise(resolve => {
+      setTimeout(() => resolve(token === runToken), ms);
+    });
+  }
+
+  function clampInt(value, min, max) {
+    let n = parseInt(value, 10);
+    if (isNaN(n)) n = min;
+    return Math.min(max, Math.max(min, n));
+  }
+
+  function clampNum(value, min) {
+    let n = parseFloat(value);
+    if (isNaN(n)) n = min;
+    return Math.max(min, n);
+  }
+
+  function clampRange(value, min, max) {
+    let n = parseFloat(value);
+    if (isNaN(n)) n = min;
+    return Math.min(max, Math.max(min, n));
+  }
+
+  function computePositions() {
+    const stageWidth = stage.clientWidth;
+    const centerX = stageWidth / 2;
+    const dxValue = clampNum(document.getElementById('dxValue').value, 0);
+    const unit = document.getElementById('dxUnit').value;
+    const dxPx = unit === 'cm' ? dxValue * CM_TO_PX : (dxValue / 100) * stageWidth;
+    const yPercent = clampRange(document.getElementById('yPercent').value, 0, 100);
+
+    const x = centerX - dxPx;
+    const z = centerX + dxPx;
+    const y = x + (yPercent / 100) * (z - x);
+
+    return { x, y, z };
+  }
+
+  function layoutSites() {
+    const pos = computePositions();
+    ['x', 'y', 'z'].forEach(site => {
+      const left = pos[site] + 'px';
+      dots[site].style.left = left;
+      crosshairs[site].style.left = left;
+    });
+    fixationCross.style.left = (pos.x + pos.z) / 2 + 'px';
+  }
+
+  window.addEventListener('resize', layoutSites);
+  layoutSites();
+
+  function setControlsEnabled(enabled) {
+    document.querySelectorAll('#controls input, #controls select').forEach(el => {
+      el.disabled = !enabled;
+    });
+  }
+
+  function setRunningState(running) {
+    isRunning = running;
+    startBtn.textContent = running ? 'Stop' : 'Start';
+    startBtn.classList.toggle('running', running);
+    setControlsEnabled(!running);
+  }
+
+  async function flashSite(site, reps, onMs, offMs, token) {
+    const dotEl = dots[site];
+    for (let i = 0; i < reps; i++) {
+      if (token !== runToken) return false;
+      dotEl.classList.add('on');
+      let ok = await sleep(onMs, token);
+      dotEl.classList.remove('on');
+      if (!ok) return false;
+      if (i < reps - 1) {
+        ok = await sleep(offMs, token);
+        if (!ok) return false;
+      }
+    }
+    return true;
+  }
+
+  async function runSequence() {
+    const token = ++runToken;
+    setRunningState(true);
+    layoutSites();
+
+    const reps = {
+      x: clampInt(document.getElementById('repsX').value, 0, 10),
+      y: clampInt(document.getElementById('repsY').value, 0, 10),
+      z: clampInt(document.getElementById('repsZ').value, 0, 10)
+    };
+    const onMs = clampNum(document.getElementById('onDuration').value, 1);
+    const offMs = clampNum(document.getElementById('offDuration').value, 0);
+    const delayBetween = clampNum(document.getElementById('delayBetween').value, 0);
+
+    const sites = ['x', 'y', 'z'].filter(s => reps[s] > 0);
+
+    for (let idx = 0; idx < sites.length; idx++) {
+      const site = sites[idx];
+      const ok = await flashSite(site, reps[site], onMs, offMs, token);
+      if (!ok) {
+        setRunningState(false);
+        return;
+      }
+      if (idx < sites.length - 1) {
+        const ok2 = await sleep(delayBetween, token);
+        if (!ok2) {
+          setRunningState(false);
+          return;
+        }
+      }
+    }
+
+    if (token === runToken) {
+      setRunningState(false);
+    }
+  }
+
+  function stopSequence() {
+    runToken++; // invalidates any pending sleeps in the running sequence
+    Object.values(dots).forEach(d => d.classList.remove('on'));
+    setRunningState(false);
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (isRunning) {
+      stopSequence();
+    } else {
+      runSequence();
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
